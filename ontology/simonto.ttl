@@ -1,0 +1,151 @@
+@prefix sim:     <https://github.com/Bipin-24/simonto#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# ---------------------------------------------------------------------------
+# SimOnto: a small ontology for describing the *programmatic surface* of a
+# simulation product (operations, parameters, data artifacts, prerequisites)
+# so that AI agents can discover and invoke it safely.
+# ---------------------------------------------------------------------------
+
+<https://github.com/Bipin-24/simonto> a owl:Ontology ;
+    dcterms:title "SimOnto - ontology of agent-callable simulation operations" ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "Describes a simulation product's scripting surface as typed operations, parameters, data artifacts and prerequisites." .
+
+# ---- Classes ---------------------------------------------------------------
+
+sim:Product a owl:Class ;
+    rdfs:label "Product" ;
+    rdfs:comment "A software product whose capabilities are exposed to AI agents." .
+
+sim:Operation a owl:Class ;
+    rdfs:label "Operation" ;
+    rdfs:comment "A discrete, callable unit of product functionality (one scripting API call or workflow step)." .
+
+sim:PreprocessingOperation a owl:Class ;
+    rdfs:subClassOf sim:Operation ;
+    rdfs:label "Preprocessing operation" ;
+    rdfs:comment "Geometry, meshing and set-up steps that run before a solve." .
+
+sim:SolveOperation a owl:Class ;
+    rdfs:subClassOf sim:Operation ;
+    rdfs:label "Solve operation" ;
+    rdfs:comment "Steps that run or monitor the numerical solver." .
+
+sim:PostprocessingOperation a owl:Class ;
+    rdfs:subClassOf sim:Operation ;
+    rdfs:label "Postprocessing operation" ;
+    rdfs:comment "Steps that read, reduce or export solver results." .
+
+sim:SurrogateOperation a owl:Class ;
+    rdfs:subClassOf sim:Operation ;
+    rdfs:label "Surrogate operation" ;
+    rdfs:comment "Steps that build or query a data-driven surrogate of the solver." .
+
+sim:Parameter a owl:Class ;
+    rdfs:label "Parameter" ;
+    rdfs:comment "A typed input of an operation, with unit, bounds and allowed values." .
+
+sim:DataArtifact a owl:Class ;
+    rdfs:label "Data artifact" ;
+    rdfs:comment "A typed piece of data (geometry, mesh, results) that operations consume and produce." .
+
+sim:FileFormat a owl:Class ;
+    rdfs:label "File format" ;
+    rdfs:comment "A serialisation format in which a data artifact may be stored." .
+
+# ---- Object properties -----------------------------------------------------
+
+sim:exposes a owl:ObjectProperty ;
+    rdfs:domain sim:Product ; rdfs:range sim:Operation ;
+    owl:inverseOf sim:exposedBy ;
+    rdfs:comment "The product exposes this operation to agents." .
+
+sim:exposedBy a owl:ObjectProperty ;
+    rdfs:domain sim:Operation ; rdfs:range sim:Product .
+
+sim:hasParameter a owl:ObjectProperty ;
+    rdfs:domain sim:Operation ; rdfs:range sim:Parameter ;
+    rdfs:comment "An input parameter of the operation." .
+
+sim:consumes a owl:ObjectProperty ;
+    rdfs:domain sim:Operation ; rdfs:range sim:DataArtifact ;
+    rdfs:comment "A data artifact that must exist before the operation can run." .
+
+sim:produces a owl:ObjectProperty ;
+    rdfs:domain sim:Operation ; rdfs:range sim:DataArtifact ;
+    rdfs:comment "A data artifact that the operation creates." .
+
+sim:requiresOperation a owl:ObjectProperty , owl:TransitiveProperty ;
+    rdfs:domain sim:Operation ; rdfs:range sim:Operation ;
+    rdfs:comment "Prerequisite: this operation must be preceded by the other. Transitive, so closures answer 'what must run first?'." .
+
+sim:hasFormat a owl:ObjectProperty ;
+    rdfs:domain sim:DataArtifact ; rdfs:range sim:FileFormat ;
+    rdfs:comment "A format in which the artifact can be stored." .
+
+# ---- Datatype properties ---------------------------------------------------
+
+sim:toolName a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Operation ; rdfs:range xsd:string ;
+    rdfs:comment "Stable snake_case identifier used as the agent-facing tool name." .
+
+sim:invocation a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Operation ; rdfs:range xsd:string ;
+    rdfs:comment "How the operation is reached in the underlying product (API path, CLI command, script)." .
+
+sim:isDestructive a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Operation ; rdfs:range xsd:boolean ;
+    rdfs:comment "True if the operation can overwrite or delete existing data." .
+
+sim:isReadOnly a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Operation ; rdfs:range xsd:boolean ;
+    rdfs:comment "True if the operation only inspects data and changes no product state (optional; defaults to false)." .
+
+sim:isIdempotent a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Operation ; rdfs:range xsd:boolean ;
+    rdfs:comment "True if repeating the call with the same arguments has no further effect." .
+
+sim:isLongRunning a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Operation ; rdfs:range xsd:boolean ;
+    rdfs:comment "True if the operation may run for minutes or longer." .
+
+sim:name a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Parameter ; rdfs:range xsd:string ;
+    rdfs:comment "Machine name of the parameter (JSON property name)." .
+
+sim:valueType a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Parameter ; rdfs:range xsd:string ;
+    rdfs:comment "One of: number, integer, string, boolean, enum." .
+
+sim:isRequired a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Parameter ; rdfs:range xsd:boolean .
+
+sim:unit a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Parameter ; rdfs:range xsd:string ;
+    rdfs:comment "Unit of measure for numeric parameters; 'dimensionless' or 'count' where applicable." .
+
+sim:minValue a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Parameter ; rdfs:range xsd:decimal .
+
+sim:maxValue a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Parameter ; rdfs:range xsd:decimal .
+
+sim:allowedValue a owl:DatatypeProperty ;
+    rdfs:domain sim:Parameter ; rdfs:range xsd:string ;
+    rdfs:comment "A permitted value of an enum parameter." .
+
+sim:defaultValue a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Parameter .
+
+sim:example a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:Parameter ;
+    rdfs:comment "A realistic example value, used in generated docs, plans and tests." .
+
+sim:externalInput a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain sim:DataArtifact ; rdfs:range xsd:boolean ;
+    rdfs:comment "True if the artifact is supplied from outside the product rather than produced by an operation." .

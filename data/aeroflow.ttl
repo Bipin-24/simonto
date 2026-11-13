@@ -1,0 +1,278 @@
+@prefix sim:  <https://github.com/Bipin-24/simonto#> .
+@prefix af:   <https://github.com/Bipin-24/simonto/data/aeroflow#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# ---------------------------------------------------------------------------
+# AeroFlow: a FICTIONAL external-aerodynamics CFD product, invented for this
+# demo. It stands in for the kind of scripting surface (geometry -> mesh ->
+# solve -> post-process -> surrogate) found in real CAE tools. No real vendor
+# API, file format or confidential information is used here.
+# ---------------------------------------------------------------------------
+
+af:AeroFlow a sim:Product ;
+    rdfs:label "AeroFlow (fictional)" ;
+    rdfs:comment "Fictional external-aerodynamics CFD product used to demonstrate ontology-driven agent tooling." ;
+    sim:exposes af:ImportGeometry, af:RepairGeometry, af:GenerateMesh, af:CheckMeshQuality,
+                af:SetBoundaryConditions, af:ConfigureSolver, af:RunSolver, af:MonitorConvergence,
+                af:ExtractForces, af:ExportResults, af:RecordDesignPoint, af:TrainSurrogate,
+                af:PredictWithSurrogate .
+
+# ---- File formats ----------------------------------------------------------
+af:STEP a sim:FileFormat ; rdfs:label "STEP" .
+af:STL  a sim:FileFormat ; rdfs:label "STL" .
+af:MSH  a sim:FileFormat ; rdfs:label "MSH mesh" .
+af:HDF5 a sim:FileFormat ; rdfs:label "HDF5" .
+af:CSV  a sim:FileFormat ; rdfs:label "CSV" .
+af:VTK  a sim:FileFormat ; rdfs:label "VTK" .
+af:ONNX a sim:FileFormat ; rdfs:label "ONNX" .
+af:JSON a sim:FileFormat ; rdfs:label "JSON" .
+
+# ---- Data artifacts --------------------------------------------------------
+af:Geometry a sim:DataArtifact ; rdfs:label "Geometry" ; sim:hasFormat af:STEP, af:STL .
+af:CleanGeometry a sim:DataArtifact ; rdfs:label "Clean geometry" ; sim:hasFormat af:STEP .
+af:Mesh a sim:DataArtifact ; rdfs:label "Mesh" ; sim:hasFormat af:MSH .
+af:MeshQualityReport a sim:DataArtifact ; rdfs:label "Mesh quality report" ; sim:hasFormat af:JSON .
+af:BoundaryConditionSet a sim:DataArtifact ; rdfs:label "Boundary condition set" ; sim:hasFormat af:JSON .
+af:SolverConfig a sim:DataArtifact ; rdfs:label "Solver configuration" ; sim:hasFormat af:JSON .
+af:SolutionFields a sim:DataArtifact ; rdfs:label "Solution fields" ; sim:hasFormat af:HDF5 .
+af:ConvergenceHistory a sim:DataArtifact ; rdfs:label "Convergence history" ; sim:hasFormat af:CSV .
+af:ConvergenceSummary a sim:DataArtifact ; rdfs:label "Convergence summary" ; sim:hasFormat af:JSON .
+af:ForceCoefficients a sim:DataArtifact ; rdfs:label "Force coefficients" ; sim:hasFormat af:JSON .
+af:ResultsExport a sim:DataArtifact ; rdfs:label "Exported results" ; sim:hasFormat af:CSV, af:VTK, af:HDF5 .
+af:ParametricDataset a sim:DataArtifact ; rdfs:label "Parametric dataset" ; sim:hasFormat af:CSV .
+af:SurrogateModel a sim:DataArtifact ; rdfs:label "Surrogate model" ; sim:hasFormat af:ONNX .
+af:SurrogatePrediction a sim:DataArtifact ; rdfs:label "Surrogate prediction" ; sim:hasFormat af:JSON .
+
+# ---- Operations ------------------------------------------------------------
+
+af:ImportGeometry a sim:PreprocessingOperation ;
+    sim:toolName "import_geometry" ;
+    rdfs:label "Import geometry" ;
+    rdfs:comment "Loads a CAD or surface file (STEP or STL) into a new AeroFlow session and sets the length unit of the model." ;
+    sim:invocation "python:aeroflow.geometry.import_file" ;
+    sim:isDestructive false ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:produces af:Geometry ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "file_path" ; rdfs:label "Geometry file path" ;
+        rdfs:comment "Path to a .step or .stl file readable by the server." ;
+        sim:valueType "string" ; sim:isRequired true ; sim:example "wing_body.step" ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "length_unit" ; rdfs:label "Length unit" ;
+        rdfs:comment "Unit in which the file's coordinates are expressed." ;
+        sim:valueType "enum" ; sim:isRequired false ; sim:allowedValue "mm", "m", "in" ; sim:defaultValue "mm" ] .
+
+af:RepairGeometry a sim:PreprocessingOperation ;
+    sim:toolName "repair_geometry" ;
+    rdfs:label "Repair geometry" ;
+    rdfs:comment "Stitches gaps, removes sliver faces and optionally fills holes so the surface is watertight and ready for meshing." ;
+    sim:invocation "python:aeroflow.geometry.repair" ;
+    sim:isDestructive false ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:requiresOperation af:ImportGeometry ;
+    sim:consumes af:Geometry ; sim:produces af:CleanGeometry ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "tolerance" ; rdfs:label "Stitching tolerance" ;
+        rdfs:comment "Maximum gap that is closed when stitching faces." ;
+        sim:valueType "number" ; sim:isRequired false ; sim:unit "mm" ;
+        sim:minValue 0.000001 ; sim:maxValue 1 ; sim:defaultValue 0.01 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "fill_holes" ; rdfs:label "Fill holes" ;
+        rdfs:comment "Close remaining open boundaries with planar patches." ;
+        sim:valueType "boolean" ; sim:isRequired false ; sim:defaultValue true ] .
+
+af:GenerateMesh a sim:PreprocessingOperation ;
+    sim:toolName "generate_mesh" ;
+    rdfs:label "Generate mesh" ;
+    rdfs:comment "Builds a volume mesh around the clean geometry, including prism layers for the boundary layer. Can take several minutes on large models." ;
+    sim:invocation "python:aeroflow.mesh.generate" ;
+    sim:isDestructive false ; sim:isIdempotent false ; sim:isLongRunning true ;
+    sim:requiresOperation af:RepairGeometry ;
+    sim:consumes af:CleanGeometry ; sim:produces af:Mesh ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "global_size" ; rdfs:label "Global element size" ;
+        rdfs:comment "Target element edge length away from the surface." ;
+        sim:valueType "number" ; sim:isRequired true ; sim:unit "mm" ;
+        sim:minValue 0.1 ; sim:maxValue 500 ; sim:example 25 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "boundary_layers" ; rdfs:label "Boundary layer count" ;
+        rdfs:comment "Number of prism layers grown from wall surfaces." ;
+        sim:valueType "integer" ; sim:isRequired false ; sim:unit "count" ;
+        sim:minValue 0 ; sim:maxValue 40 ; sim:defaultValue 10 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "growth_rate" ; rdfs:label "Layer growth rate" ;
+        rdfs:comment "Ratio of the thickness of successive prism layers." ;
+        sim:valueType "number" ; sim:isRequired false ; sim:unit "dimensionless" ;
+        sim:minValue 1.05 ; sim:maxValue 1.5 ; sim:defaultValue 1.2 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "mesh_type" ; rdfs:label "Mesh type" ;
+        rdfs:comment "Element topology used for the volume mesh." ;
+        sim:valueType "enum" ; sim:isRequired false ;
+        sim:allowedValue "tet", "poly", "hex_dominant" ; sim:defaultValue "poly" ] .
+
+af:CheckMeshQuality a sim:PreprocessingOperation ;
+    sim:isReadOnly true ;
+    sim:toolName "check_mesh_quality" ;
+    rdfs:label "Check mesh quality" ;
+    rdfs:comment "Computes skewness, aspect ratio and orthogonality statistics and reports whether the mesh passes the skewness limit. Read-only." ;
+    sim:invocation "python:aeroflow.mesh.check_quality" ;
+    sim:isDestructive false ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:requiresOperation af:GenerateMesh ;
+    sim:consumes af:Mesh ; sim:produces af:MeshQualityReport ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "max_skewness" ; rdfs:label "Skewness limit" ;
+        rdfs:comment "Largest acceptable cell skewness; 0 is perfect, 1 is degenerate." ;
+        sim:valueType "number" ; sim:isRequired false ; sim:unit "dimensionless" ;
+        sim:minValue 0 ; sim:maxValue 1 ; sim:defaultValue 0.85 ] .
+
+af:SetBoundaryConditions a sim:PreprocessingOperation ;
+    sim:toolName "set_boundary_conditions" ;
+    rdfs:label "Set boundary conditions" ;
+    rdfs:comment "Defines freestream velocity, outlet pressure, angle of attack, temperature and the turbulence model for an external-flow case." ;
+    sim:invocation "python:aeroflow.setup.set_boundary_conditions" ;
+    sim:isDestructive false ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:requiresOperation af:GenerateMesh ;
+    sim:consumes af:Mesh ; sim:produces af:BoundaryConditionSet ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "inlet_velocity" ; rdfs:label "Freestream velocity" ;
+        rdfs:comment "Speed of the incoming air, far from the body." ;
+        sim:valueType "number" ; sim:isRequired true ; sim:unit "m/s" ;
+        sim:minValue 0 ; sim:maxValue 400 ; sim:example 60 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "angle_of_attack" ; rdfs:label "Angle of attack" ;
+        rdfs:comment "Angle between the freestream and the body reference axis." ;
+        sim:valueType "number" ; sim:isRequired false ; sim:unit "deg" ;
+        sim:minValue -20 ; sim:maxValue 20 ; sim:defaultValue 0 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "outlet_pressure" ; rdfs:label "Outlet static pressure" ;
+        rdfs:comment "Gauge static pressure applied at the outlet boundary." ;
+        sim:valueType "number" ; sim:isRequired false ; sim:unit "Pa" ; sim:defaultValue 0 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "reference_temperature" ; rdfs:label "Reference temperature" ;
+        rdfs:comment "Freestream static temperature of the air." ;
+        sim:valueType "number" ; sim:isRequired false ; sim:unit "K" ;
+        sim:minValue 200 ; sim:maxValue 400 ; sim:defaultValue 288.15 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "turbulence_model" ; rdfs:label "Turbulence model" ;
+        rdfs:comment "Closure model used by the solver for turbulent flow." ;
+        sim:valueType "enum" ; sim:isRequired false ;
+        sim:allowedValue "k_omega_sst", "k_epsilon", "spalart_allmaras" ; sim:defaultValue "k_omega_sst" ] .
+
+af:ConfigureSolver a sim:PreprocessingOperation ;
+    sim:toolName "configure_solver" ;
+    rdfs:label "Configure solver" ;
+    rdfs:comment "Chooses the discretisation scheme, iteration budget and convergence tolerance; refuses meshes that failed the quality check." ;
+    sim:invocation "python:aeroflow.setup.configure_solver" ;
+    sim:isDestructive false ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:requiresOperation af:SetBoundaryConditions, af:CheckMeshQuality ;
+    sim:consumes af:BoundaryConditionSet, af:MeshQualityReport ; sim:produces af:SolverConfig ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "max_iterations" ; rdfs:label "Maximum iterations" ;
+        rdfs:comment "Iteration budget before the solver stops." ;
+        sim:valueType "integer" ; sim:isRequired false ; sim:unit "count" ;
+        sim:minValue 1 ; sim:maxValue 100000 ; sim:defaultValue 2000 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "convergence_tolerance" ; rdfs:label "Residual tolerance" ;
+        rdfs:comment "Normalised residual below which the run counts as converged." ;
+        sim:valueType "number" ; sim:isRequired false ; sim:unit "dimensionless" ;
+        sim:minValue 0.00000001 ; sim:maxValue 0.01 ; sim:defaultValue 0.00001 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "scheme" ; rdfs:label "Discretisation scheme" ;
+        rdfs:comment "Spatial discretisation order for convective terms." ;
+        sim:valueType "enum" ; sim:isRequired false ;
+        sim:allowedValue "first_order", "second_order" ; sim:defaultValue "second_order" ] .
+
+af:RunSolver a sim:SolveOperation ;
+    sim:toolName "run_solver" ;
+    rdfs:label "Run solver" ;
+    rdfs:comment "Runs the steady-state flow solver on the configured case and writes solution fields and a residual history. Long running." ;
+    sim:invocation "python:aeroflow.solve.run" ;
+    sim:isDestructive false ; sim:isIdempotent false ; sim:isLongRunning true ;
+    sim:requiresOperation af:ConfigureSolver ;
+    sim:consumes af:SolverConfig ; sim:produces af:SolutionFields, af:ConvergenceHistory ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "num_cores" ; rdfs:label "CPU cores" ;
+        rdfs:comment "Number of CPU cores allocated to the solver." ;
+        sim:valueType "integer" ; sim:isRequired false ; sim:unit "count" ;
+        sim:minValue 1 ; sim:maxValue 256 ; sim:defaultValue 8 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "restart" ; rdfs:label "Restart from previous solution" ;
+        rdfs:comment "Initialise from the last stored solution instead of freestream values." ;
+        sim:valueType "boolean" ; sim:isRequired false ; sim:defaultValue false ] .
+
+af:MonitorConvergence a sim:SolveOperation ;
+    sim:isReadOnly true ;
+    sim:toolName "monitor_convergence" ;
+    rdfs:label "Monitor convergence" ;
+    rdfs:comment "Reads the residual history and reports whether the run converged, plateaued or diverged over a trailing window. Read-only." ;
+    sim:invocation "python:aeroflow.solve.convergence_summary" ;
+    sim:isDestructive false ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:requiresOperation af:RunSolver ;
+    sim:consumes af:ConvergenceHistory ; sim:produces af:ConvergenceSummary ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "window" ; rdfs:label "Trailing window" ;
+        rdfs:comment "Number of final iterations used to judge the trend." ;
+        sim:valueType "integer" ; sim:isRequired false ; sim:unit "count" ;
+        sim:minValue 10 ; sim:maxValue 10000 ; sim:defaultValue 100 ] .
+
+af:ExtractForces a sim:PostprocessingOperation ;
+    sim:toolName "extract_forces" ;
+    rdfs:label "Extract force coefficients" ;
+    rdfs:comment "Integrates surface pressure and shear from the solution to give lift, drag and moment coefficients for a reference area." ;
+    sim:invocation "python:aeroflow.post.extract_forces" ;
+    sim:isDestructive false ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:requiresOperation af:RunSolver ;
+    sim:consumes af:SolutionFields ; sim:produces af:ForceCoefficients ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "reference_area" ; rdfs:label "Reference area" ;
+        rdfs:comment "Area used to non-dimensionalise forces, e.g. wing planform area." ;
+        sim:valueType "number" ; sim:isRequired true ; sim:unit "m2" ;
+        sim:minValue 0.0001 ; sim:maxValue 10000 ; sim:example 1.8 ] .
+
+af:ExportResults a sim:PostprocessingOperation ;
+    sim:toolName "export_results" ;
+    rdfs:label "Export results" ;
+    rdfs:comment "Writes solution fields to disk as CSV, VTK or HDF5; can overwrite an existing file when overwrite is true." ;
+    sim:invocation "python:aeroflow.post.export" ;
+    sim:isDestructive true ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:requiresOperation af:RunSolver ;
+    sim:consumes af:SolutionFields ; sim:produces af:ResultsExport ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "format" ; rdfs:label "Export format" ;
+        rdfs:comment "File format for the exported results." ;
+        sim:valueType "enum" ; sim:isRequired true ;
+        sim:allowedValue "csv", "vtk", "hdf5" ; sim:example "vtk" ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "output_path" ; rdfs:label "Output path" ;
+        rdfs:comment "Destination file path on the server." ;
+        sim:valueType "string" ; sim:isRequired true ; sim:example "results/case_01.vtk" ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "overwrite" ; rdfs:label "Overwrite existing file" ;
+        rdfs:comment "Replace the destination file if it already exists." ;
+        sim:valueType "boolean" ; sim:isRequired false ; sim:defaultValue false ] .
+
+af:RecordDesignPoint a sim:SurrogateOperation ;
+    sim:toolName "record_design_point" ;
+    rdfs:label "Record design point" ;
+    rdfs:comment "Appends the current inputs and force coefficients as one row of a parametric dataset used to train surrogates." ;
+    sim:invocation "python:aeroflow.doe.record_point" ;
+    sim:isDestructive false ; sim:isIdempotent false ; sim:isLongRunning false ;
+    sim:requiresOperation af:ExtractForces ;
+    sim:consumes af:ForceCoefficients ; sim:produces af:ParametricDataset ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "dataset_path" ; rdfs:label "Dataset path" ;
+        rdfs:comment "CSV file that accumulates design points." ;
+        sim:valueType "string" ; sim:isRequired true ; sim:example "doe/wing_sweep.csv" ] .
+
+af:TrainSurrogate a sim:SurrogateOperation ;
+    sim:toolName "train_surrogate" ;
+    rdfs:label "Train surrogate" ;
+    rdfs:comment "Fits a data-driven surrogate of the solver on the parametric dataset and reports validation error. Long running." ;
+    sim:invocation "python:aeroflow.surrogate.train" ;
+    sim:isDestructive false ; sim:isIdempotent false ; sim:isLongRunning true ;
+    sim:requiresOperation af:RecordDesignPoint ;
+    sim:consumes af:ParametricDataset ; sim:produces af:SurrogateModel ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "model_type" ; rdfs:label "Surrogate model type" ;
+        rdfs:comment "Regression family used for the surrogate." ;
+        sim:valueType "enum" ; sim:isRequired false ;
+        sim:allowedValue "gaussian_process", "neural_network", "polynomial_chaos" ;
+        sim:defaultValue "gaussian_process" ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "validation_split" ; rdfs:label "Validation split" ;
+        rdfs:comment "Fraction of design points held out to estimate error." ;
+        sim:valueType "number" ; sim:isRequired false ; sim:unit "fraction" ;
+        sim:minValue 0.05 ; sim:maxValue 0.5 ; sim:defaultValue 0.2 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "random_seed" ; rdfs:label "Random seed" ;
+        rdfs:comment "Seed that makes training reproducible." ;
+        sim:valueType "integer" ; sim:isRequired false ; sim:unit "count" ; sim:defaultValue 42 ] .
+
+af:PredictWithSurrogate a sim:SurrogateOperation ;
+    sim:isReadOnly true ;
+    sim:toolName "predict_with_surrogate" ;
+    rdfs:label "Predict with surrogate" ;
+    rdfs:comment "Predicts lift and drag coefficients for new flow conditions in milliseconds using the trained surrogate. Read-only." ;
+    sim:invocation "python:aeroflow.surrogate.predict" ;
+    sim:isDestructive false ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:requiresOperation af:TrainSurrogate ;
+    sim:consumes af:SurrogateModel ; sim:produces af:SurrogatePrediction ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "inlet_velocity" ; rdfs:label "Freestream velocity" ;
+        rdfs:comment "Speed of the incoming air to predict for." ;
+        sim:valueType "number" ; sim:isRequired true ; sim:unit "m/s" ;
+        sim:minValue 0 ; sim:maxValue 400 ; sim:example 60 ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "angle_of_attack" ; rdfs:label "Angle of attack" ;
+        rdfs:comment "Angle of attack to predict for." ;
+        sim:valueType "number" ; sim:isRequired true ; sim:unit "deg" ;
+        sim:minValue -20 ; sim:maxValue 20 ; sim:example 4 ] .

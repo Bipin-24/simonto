@@ -1,0 +1,35 @@
+flowchart LR
+  subgraph PreprocessingOperation["PreprocessingOperation"]
+    check_mesh_quality[check_mesh_quality]
+    configure_solver[configure_solver]
+    generate_mesh[[generate_mesh]]
+    import_geometry[import_geometry]
+    repair_geometry[repair_geometry]
+    set_boundary_conditions[set_boundary_conditions]
+  end
+  subgraph PostprocessingOperation["PostprocessingOperation"]
+    export_results[export_results]
+    extract_forces[extract_forces]
+  end
+  subgraph SolveOperation["SolveOperation"]
+    monitor_convergence[monitor_convergence]
+    run_solver[[run_solver]]
+  end
+  subgraph SurrogateOperation["SurrogateOperation"]
+    predict_with_surrogate[predict_with_surrogate]
+    record_design_point[record_design_point]
+    train_surrogate[[train_surrogate]]
+  end
+  generate_mesh --> check_mesh_quality
+  check_mesh_quality --> configure_solver
+  set_boundary_conditions --> configure_solver
+  run_solver --> export_results
+  run_solver --> extract_forces
+  repair_geometry --> generate_mesh
+  run_solver --> monitor_convergence
+  train_surrogate --> predict_with_surrogate
+  extract_forces --> record_design_point
+  import_geometry --> repair_geometry
+  configure_solver --> run_solver
+  generate_mesh --> set_boundary_conditions
+  record_design_point --> train_surrogate

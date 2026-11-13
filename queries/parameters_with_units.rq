@@ -1,0 +1,7 @@
+# Every numeric parameter with unit and safe range - the contract an agent must respect.
+PREFIX sim: <https://github.com/Bipin-24/simonto#>
+SELECT ?tool ?param ?unit ?min ?max WHERE {
+  ?op sim:toolName ?tool ; sim:hasParameter ?p .
+  ?p sim:name ?param ; sim:unit ?unit .
+  OPTIONAL { ?p sim:minValue ?min } OPTIONAL { ?p sim:maxValue ?max }
+} ORDER BY ?tool ?param

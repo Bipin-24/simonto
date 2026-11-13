@@ -1,0 +1,76 @@
+@prefix sim:  <https://github.com/Bipin-24/simonto#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# SHACL "agentic-readiness" shapes: a product description that conforms is
+# complete enough to be turned into safe, typed agent tools.
+
+sim:OperationShape a sh:NodeShape ;
+    sh:targetClass sim:Operation ;
+    sh:property [ sh:path sim:toolName ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:pattern "^[a-z][a-z0-9_]{2,48}$" ;
+                  sh:message "Operation needs exactly one snake_case sim:toolName." ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ;
+                  sh:message "Operation needs an rdfs:label." ] ;
+    sh:property [ sh:path rdfs:comment ; sh:minCount 1 ; sh:minLength 40 ;
+                  sh:message "Operation description (rdfs:comment) must be at least 40 characters so an LLM can choose it correctly." ] ;
+    sh:property [ sh:path sim:invocation ; sh:minCount 1 ;
+                  sh:message "Operation must say how it is invoked (sim:invocation)." ] ;
+    sh:property [ sh:path sim:produces ; sh:minCount 1 ;
+                  sh:message "Operation must declare at least one produced artifact." ] ;
+    sh:property [ sh:path sim:isDestructive ; sh:minCount 1 ; sh:datatype xsd:boolean ;
+                  sh:message "Operation must declare sim:isDestructive (true/false)." ] ;
+    sh:property [ sh:path sim:isIdempotent ; sh:minCount 1 ; sh:datatype xsd:boolean ;
+                  sh:message "Operation must declare sim:isIdempotent (true/false)." ] ;
+    sh:property [ sh:path sim:isLongRunning ; sh:minCount 1 ; sh:datatype xsd:boolean ;
+                  sh:message "Operation must declare sim:isLongRunning (true/false)." ] ;
+    sh:property [ sh:path sim:hasParameter ; sh:node sim:ParameterShape ] ;
+    sh:property [ sh:path sim:requiresOperation ; sh:class sim:Operation ;
+                  sh:message "sim:requiresOperation must point to an Operation." ] .
+
+sim:ParameterShape a sh:NodeShape ;
+    sh:property [ sh:path sim:name ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:pattern "^[a-z][a-z0-9_]*$" ;
+                  sh:message "Parameter needs one snake_case sim:name." ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ] ;
+    sh:property [ sh:path rdfs:comment ; sh:minCount 1 ; sh:minLength 10 ;
+                  sh:message "Parameter needs a description of at least 10 characters." ] ;
+    sh:property [ sh:path sim:valueType ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:in ( "number" "integer" "string" "boolean" "enum" ) ;
+                  sh:message "sim:valueType must be number, integer, string, boolean or enum." ] ;
+    sh:property [ sh:path sim:isRequired ; sh:minCount 1 ; sh:datatype xsd:boolean ] ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Enum parameters must list at least one sim:allowedValue." ;
+        sh:select """
+            SELECT $this WHERE {
+              $this <https://github.com/Bipin-24/simonto#valueType> "enum" .
+              FILTER NOT EXISTS { $this <https://github.com/Bipin-24/simonto#allowedValue> ?v }
+            }""" ] ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Numeric parameters must declare a sim:unit ('dimensionless' or 'count' where applicable)." ;
+        sh:select """
+            SELECT $this WHERE {
+              $this <https://github.com/Bipin-24/simonto#valueType> ?t .
+              FILTER (?t IN ("number", "integer"))
+              FILTER NOT EXISTS { $this <https://github.com/Bipin-24/simonto#unit> ?u }
+            }""" ] ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Required parameters must carry a sim:example value." ;
+        sh:select """
+            SELECT $this WHERE {
+              $this <https://github.com/Bipin-24/simonto#isRequired> true .
+              FILTER NOT EXISTS { $this <https://github.com/Bipin-24/simonto#example> ?e }
+            }""" ] ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "sim:minValue must not exceed sim:maxValue." ;
+        sh:select """
+            SELECT $this WHERE {
+              $this <https://github.com/Bipin-24/simonto#minValue> ?lo ;
+                    <https://github.com/Bipin-24/simonto#maxValue> ?hi .
+              FILTER (?lo > ?hi)
+            }""" ] .

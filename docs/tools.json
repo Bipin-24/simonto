@@ -1,0 +1,450 @@
+{
+  "tools": [
+    {
+      "name": "check_mesh_quality",
+      "description": "Computes skewness, aspect ratio and orthogonality statistics and reports whether the mesh passes the skewness limit. Read-only. Run first: generate_mesh. Produces: MeshQualityReport. Note: read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "max_skewness": {
+            "type": "number",
+            "description": "Largest acceptable cell skewness; 0 is perfect, 1 is degenerate.",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.85
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Check mesh quality",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "configure_solver",
+      "description": "Chooses the discretisation scheme, iteration budget and convergence tolerance; refuses meshes that failed the quality check. Run first: check_mesh_quality, set_boundary_conditions. Produces: SolverConfig.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "convergence_tolerance": {
+            "type": "number",
+            "description": "Normalised residual below which the run counts as converged.",
+            "minimum": 1e-08,
+            "maximum": 0.01,
+            "default": 1e-05
+          },
+          "max_iterations": {
+            "type": "integer",
+            "description": "Iteration budget before the solver stops.",
+            "minimum": 1,
+            "maximum": 100000,
+            "default": 2000
+          },
+          "scheme": {
+            "type": "string",
+            "description": "Spatial discretisation order for convective terms.",
+            "enum": [
+              "first_order",
+              "second_order"
+            ],
+            "default": "second_order"
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Configure solver",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "export_results",
+      "description": "Writes solution fields to disk as CSV, VTK or HDF5; can overwrite an existing file when overwrite is true. Run first: run_solver. Produces: ResultsExport. Note: can overwrite data.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "description": "File format for the exported results.",
+            "enum": [
+              "csv",
+              "hdf5",
+              "vtk"
+            ]
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Destination file path on the server."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "Replace the destination file if it already exists.",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "output_path"
+        ]
+      },
+      "annotations": {
+        "title": "Export results",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "extract_forces",
+      "description": "Integrates surface pressure and shear from the solution to give lift, drag and moment coefficients for a reference area. Run first: run_solver. Produces: ForceCoefficients.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reference_area": {
+            "type": "number",
+            "description": "Area used to non-dimensionalise forces, e.g. wing planform area. Unit: m2.",
+            "minimum": 0.0001,
+            "maximum": 10000
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference_area"
+        ]
+      },
+      "annotations": {
+        "title": "Extract force coefficients",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "generate_mesh",
+      "description": "Builds a volume mesh around the clean geometry, including prism layers for the boundary layer. Can take several minutes on large models. Run first: repair_geometry. Produces: Mesh. Note: long running.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "global_size": {
+            "type": "number",
+            "description": "Target element edge length away from the surface. Unit: mm.",
+            "minimum": 0.1,
+            "maximum": 500
+          },
+          "boundary_layers": {
+            "type": "integer",
+            "description": "Number of prism layers grown from wall surfaces.",
+            "minimum": 0,
+            "maximum": 40,
+            "default": 10
+          },
+          "growth_rate": {
+            "type": "number",
+            "description": "Ratio of the thickness of successive prism layers.",
+            "minimum": 1.05,
+            "maximum": 1.5,
+            "default": 1.2
+          },
+          "mesh_type": {
+            "type": "string",
+            "description": "Element topology used for the volume mesh.",
+            "enum": [
+              "hex_dominant",
+              "poly",
+              "tet"
+            ],
+            "default": "poly"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "global_size"
+        ]
+      },
+      "annotations": {
+        "title": "Generate mesh",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "import_geometry",
+      "description": "Loads a CAD or surface file (STEP or STL) into a new AeroFlow session and sets the length unit of the model. Produces: Geometry.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to a .step or .stl file readable by the server."
+          },
+          "length_unit": {
+            "type": "string",
+            "description": "Unit in which the file's coordinates are expressed.",
+            "enum": [
+              "in",
+              "m",
+              "mm"
+            ],
+            "default": "mm"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "file_path"
+        ]
+      },
+      "annotations": {
+        "title": "Import geometry",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "monitor_convergence",
+      "description": "Reads the residual history and reports whether the run converged, plateaued or diverged over a trailing window. Read-only. Run first: run_solver. Produces: ConvergenceSummary. Note: read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "integer",
+            "description": "Number of final iterations used to judge the trend.",
+            "minimum": 10,
+            "maximum": 10000,
+            "default": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Monitor convergence",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "predict_with_surrogate",
+      "description": "Predicts lift and drag coefficients for new flow conditions in milliseconds using the trained surrogate. Read-only. Run first: train_surrogate. Produces: SurrogatePrediction. Note: read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "angle_of_attack": {
+            "type": "number",
+            "description": "Angle of attack to predict for. Unit: deg.",
+            "minimum": -20,
+            "maximum": 20
+          },
+          "inlet_velocity": {
+            "type": "number",
+            "description": "Speed of the incoming air to predict for. Unit: m/s.",
+            "minimum": 0,
+            "maximum": 400
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "angle_of_attack",
+          "inlet_velocity"
+        ]
+      },
+      "annotations": {
+        "title": "Predict with surrogate",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "record_design_point",
+      "description": "Appends the current inputs and force coefficients as one row of a parametric dataset used to train surrogates. Run first: extract_forces. Produces: ParametricDataset.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dataset_path": {
+            "type": "string",
+            "description": "CSV file that accumulates design points."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "dataset_path"
+        ]
+      },
+      "annotations": {
+        "title": "Record design point",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "repair_geometry",
+      "description": "Stitches gaps, removes sliver faces and optionally fills holes so the surface is watertight and ready for meshing. Run first: import_geometry. Produces: CleanGeometry.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fill_holes": {
+            "type": "boolean",
+            "description": "Close remaining open boundaries with planar patches.",
+            "default": true
+          },
+          "tolerance": {
+            "type": "number",
+            "description": "Maximum gap that is closed when stitching faces. Unit: mm.",
+            "minimum": 1e-06,
+            "maximum": 1,
+            "default": 0.01
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Repair geometry",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "run_solver",
+      "description": "Runs the steady-state flow solver on the configured case and writes solution fields and a residual history. Long running. Run first: configure_solver. Produces: ConvergenceHistory, SolutionFields. Note: long running.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "num_cores": {
+            "type": "integer",
+            "description": "Number of CPU cores allocated to the solver.",
+            "minimum": 1,
+            "maximum": 256,
+            "default": 8
+          },
+          "restart": {
+            "type": "boolean",
+            "description": "Initialise from the last stored solution instead of freestream values.",
+            "default": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Run solver",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "set_boundary_conditions",
+      "description": "Defines freestream velocity, outlet pressure, angle of attack, temperature and the turbulence model for an external-flow case. Run first: generate_mesh. Produces: BoundaryConditionSet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "inlet_velocity": {
+            "type": "number",
+            "description": "Speed of the incoming air, far from the body. Unit: m/s.",
+            "minimum": 0,
+            "maximum": 400
+          },
+          "angle_of_attack": {
+            "type": "number",
+            "description": "Angle between the freestream and the body reference axis. Unit: deg.",
+            "minimum": -20,
+            "maximum": 20,
+            "default": 0
+          },
+          "outlet_pressure": {
+            "type": "number",
+            "description": "Gauge static pressure applied at the outlet boundary. Unit: Pa.",
+            "default": 0
+          },
+          "reference_temperature": {
+            "type": "number",
+            "description": "Freestream static temperature of the air. Unit: K.",
+            "minimum": 200,
+            "maximum": 400,
+            "default": 288.15
+          },
+          "turbulence_model": {
+            "type": "string",
+            "description": "Closure model used by the solver for turbulent flow.",
+            "enum": [
+              "k_epsilon",
+              "k_omega_sst",
+              "spalart_allmaras"
+            ],
+            "default": "k_omega_sst"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "inlet_velocity"
+        ]
+      },
+      "annotations": {
+        "title": "Set boundary conditions",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "train_surrogate",
+      "description": "Fits a data-driven surrogate of the solver on the parametric dataset and reports validation error. Long running. Run first: record_design_point. Produces: SurrogateModel. Note: long running.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "model_type": {
+            "type": "string",
+            "description": "Regression family used for the surrogate.",
+            "enum": [
+              "gaussian_process",
+              "neural_network",
+              "polynomial_chaos"
+            ],
+            "default": "gaussian_process"
+          },
+          "random_seed": {
+            "type": "integer",
+            "description": "Seed that makes training reproducible.",
+            "default": 42
+          },
+          "validation_split": {
+            "type": "number",
+            "description": "Fraction of design points held out to estimate error. Unit: fraction.",
+            "minimum": 0.05,
+            "maximum": 0.5,
+            "default": 0.2
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Train surrogate",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    }
+  ]
+}

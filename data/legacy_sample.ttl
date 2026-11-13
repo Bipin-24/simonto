@@ -1,0 +1,29 @@
+@prefix sim:  <https://github.com/Bipin-24/simonto#> .
+@prefix lg:   <https://github.com/Bipin-24/simonto/data/legacy#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# A deliberately poor "as-found" description of a scripting surface, as it often
+# looks before an ontology review. `simonto --data data/legacy_sample.ttl validate`
+# should fail and `readiness` should score it low.
+
+lg:RunIt a sim:Operation ;
+    sim:toolName "run_it" ;
+    rdfs:label "Run" ;
+    rdfs:comment "Runs it." ;
+    sim:invocation "legacy.run" ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "n" ; rdfs:label "n" ; rdfs:comment "n" ;
+                       sim:valueType "number" ; sim:isRequired true ] ;
+    sim:hasParameter [ a sim:Parameter ; sim:name "mode" ; rdfs:label "mode" ; rdfs:comment "Mode of run" ;
+                       sim:valueType "enum" ; sim:isRequired false ] .
+
+lg:Report a sim:Operation ;
+    sim:toolName "report" ;
+    rdfs:label "Report" ;
+    rdfs:comment "Creates the report from whatever the last run left behind in the working directory." ;
+    sim:invocation "legacy.report" ;
+    sim:isDestructive false ; sim:isIdempotent true ; sim:isLongRunning false ;
+    sim:consumes lg:RunOutput ;
+    sim:produces lg:ReportFile .
+
+lg:RunOutput a sim:DataArtifact ; rdfs:label "Run output" .
+lg:ReportFile a sim:DataArtifact ; rdfs:label "Report file" .

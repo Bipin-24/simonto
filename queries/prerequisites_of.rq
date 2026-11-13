@@ -1,0 +1,7 @@
+# Everything that must run before an operation (transitive property path).
+PREFIX sim: <https://github.com/Bipin-24/simonto#>
+SELECT DISTINCT ?tool WHERE {
+  ?goal sim:toolName "run_solver" ;
+        sim:requiresOperation+ ?pre .
+  ?pre  sim:toolName ?tool .
+} ORDER BY ?tool

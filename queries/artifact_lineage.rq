@@ -1,0 +1,8 @@
+# Which operation produces each artifact and which consume it (data lineage).
+PREFIX sim:  <https://github.com/Bipin-24/simonto#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?artifact ?producer (GROUP_CONCAT(?consumer; separator=", ") AS ?consumers) WHERE {
+  ?a rdfs:label ?artifact .
+  ?p sim:produces ?a ; sim:toolName ?producer .
+  OPTIONAL { ?c sim:consumes ?a ; sim:toolName ?consumer }
+} GROUP BY ?artifact ?producer ORDER BY ?artifact

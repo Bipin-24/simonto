@@ -1,0 +1,6 @@
+# Operations an agent should confirm with a human before calling.
+PREFIX sim: <https://github.com/Bipin-24/simonto#>
+SELECT ?tool ?destructive ?longRunning WHERE {
+  ?op sim:toolName ?tool ; sim:isDestructive ?destructive ; sim:isLongRunning ?longRunning .
+  FILTER (?destructive = true || ?longRunning = true)
+} ORDER BY ?tool
